@@ -20,6 +20,8 @@ IMAGE_CLASS_NAME = "media-viewer-overview__section-image"
 DESCRIPTION_CLASS_NAME = "object-description-body"
 DESCRIPTION_OPEN_BUTTON_CLASS = "object-description-open-button"
 
+DATA_CLASS_NAME = "object-kenmerken-list"
+
 MAX_TRANSLATION_LENGTH = 5000
 
 WEB_DRIVER_OPTIONS = Options()
@@ -72,11 +74,22 @@ def download_photos(url, directory_name):
 
 def get_data(url, address_name):
     """
-    Gets data like asking price, asking price per sqm, availability date, living area, plot area, number of bedrooms, energy label, makelaar
+    Gets data like
+    * asking price, asking price per sqm,
+    * construction year
+    * availability date
+    * living area, plot area
+    * number of bedrooms
+    * energy label
+    * makelaar
     Finally gets the description and translates it to English
     """
     driver = webdriver.Chrome(service=WEB_DRIVER_SERVICE, options=WEB_DRIVER_OPTIONS)
     driver.get(url)
+    print("Retrieving data...")
+    data = driver.find_elements(By.CLASS_NAME, DATA_CLASS_NAME)
+    for d in data:
+        print(d.get_attribute("outerHTML"))
 
     print("Extracting/Translating the description...")
     # Expand the description
@@ -148,13 +161,13 @@ search_url = generate_search_url(price_min, price_max, bedrooms_min, area_min, c
 
 urls = get_all_href_urls(search_url)
 
-for url in urls[:2]:
+for url in urls:
     # Remove the trailing '/' if it exists
     if url[-1] == '/':
         url = url[:-1]
 
     address_name = create_directory(url)
-    download_photos(url, address_name)
+    # download_photos(url, address_name)
     get_data(url, address_name)
     # TODO: get other data as well
     # like asking price, area, energy label, number of bedrooms
