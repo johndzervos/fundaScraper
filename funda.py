@@ -7,19 +7,13 @@ from selenium.webdriver.common.by import By
 from deep_translator import GoogleTranslator
 
 import urllib.request
-
+import pandas as pd
 import os
 
-DATA_DIRECTORY = 'data'
-if not os.path.exists(DATA_DIRECTORY):
-    os.mkdir(DATA_DIRECTORY)
-
 SEARCH_ENTRY_XPATH = "//*[@class='h-full min-w-[228px] shrink-0 cursor-pointer']"
-
 IMAGE_CLASS_NAME = "media-viewer-overview__section-image"
 DESCRIPTION_CLASS_NAME = "object-description-body"
 DESCRIPTION_OPEN_BUTTON_CLASS = "object-description-open-button"
-
 DATA_CLASS_NAME = "object-kenmerken-list"
 
 MAX_TRANSLATION_LENGTH = 5000
@@ -30,8 +24,14 @@ WEB_DRIVER_OPTIONS.add_argument(f'user-agent={user_agent}')
 WEB_DRIVER_OPTIONS.add_argument('--headless')
 WEB_DRIVER_OPTIONS.add_argument('--no-sandbox')
 WEB_DRIVER_OPTIONS.add_argument('--disable-dev-shm-usage')
-
 WEB_DRIVER_SERVICE = Service(ChromeDriverManager().install())
+
+ENTRIES_CSV_NAME = 'entries.csv'
+
+DATA_DIRECTORY = 'data'
+if not os.path.exists(DATA_DIRECTORY):
+    os.mkdir(DATA_DIRECTORY)
+
 
 def get_address_name(url):
     """
@@ -72,24 +72,61 @@ def download_photos(url, directory_name):
     driver.close()
     print(f"{len(images)} photos have been downloaded!")
 
+def clean_string(info_string):
+    """
+    Remove unnecessary information from the string
+    """
+    return (info_string.replace("€ ", "")  # in monetary fields
+                       .replace(".", "")  # in monetary fields
+                       .replace(" m²", "")  # in area fields
+                       .replace(" kosten koper", "")  # in asking price field
+                       .replace(" Wat betekent dit?", ""))  # in energy label field
+
+def get_info(url, data):
+    """
+    Gets data like
+    * url
+    * asking price, asking price per sqm,
+    * construction year
+    * living area, plot area
+    * number of rooms
+    * energy label
+    """
+    USEFUL_INFO = [
+        'Vraagprijs',
+        'Vraagprijs per m²',
+        'Bouwjaar',
+        'Wonen',
+        'Perceel',
+        'Aantal kamers',
+        'Energielabel'
+    ]
+    info = {'url': url}
+    for section in data:
+        lines = section.get_attribute("innerText").split('\n')
+        for field, value in zip(lines, lines[1:]):
+            if field in USEFUL_INFO:
+                field = '_'.join(field.lower().split())
+                info[field] = clean_string(value)
+    return info
+
 def get_data(url, address_name):
     """
     Gets data like
     * asking price, asking price per sqm,
     * construction year
-    * availability date
     * living area, plot area
-    * number of bedrooms
+    * number of rooms
     * energy label
-    * makelaar
     Finally gets the description and translates it to English
     """
     driver = webdriver.Chrome(service=WEB_DRIVER_SERVICE, options=WEB_DRIVER_OPTIONS)
     driver.get(url)
     print("Retrieving data...")
     data = driver.find_elements(By.CLASS_NAME, DATA_CLASS_NAME)
-    for d in data:
-        print(d.get_attribute("outerHTML"))
+
+    info = get_info(url, data)
+    print(info)
 
     print("Extracting/Translating the description...")
     # Expand the description
@@ -100,6 +137,8 @@ def get_data(url, address_name):
 
     driver.close()
     save_and_translate_description(description, address_name)
+
+    return info
 
 def save_and_translate_description(description, address_name):
     """
@@ -161,6 +200,14 @@ search_url = generate_search_url(price_min, price_max, bedrooms_min, area_min, c
 
 urls = get_all_href_urls(search_url)
 
+# Read already saved entries
+try:
+    entries_df = pd.read_csv(ENTRIES_CSV_NAME)
+except FileNotFoundError:
+    entries_df = pd.DataFrame()
+
+print(entries_df)
+
 for url in urls:
     # Remove the trailing '/' if it exists
     if url[-1] == '/':
@@ -168,9 +215,8 @@ for url in urls:
 
     address_name = create_directory(url)
     # download_photos(url, address_name)
-    get_data(url, address_name)
-    # TODO: get other data as well
-    # like asking price, area, energy label, number of bedrooms
+    info = get_data(url, address_name)
+    print(pd.DataFrame([info]))
     # TODO: if entry already exists, compare the data and check if there are differences
 # TODO: Generate excel file with the data
 
