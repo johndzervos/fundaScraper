@@ -82,7 +82,7 @@ def clean_string(info_string):
                        .replace(" kosten koper", "")  # in asking price field
                        .replace(" Wat betekent dit?", ""))  # in energy label field
 
-def get_info(url, data):
+def get_info(url, address_name, data):
     """
     Gets data like
     * url
@@ -101,7 +101,10 @@ def get_info(url, data):
         'Aantal kamers',
         'Energielabel'
     ]
-    info = {'url': url}
+    info = {
+        'url': url,
+        'address': address_name,
+    }
     for section in data:
         lines = section.get_attribute("innerText").split('\n')
         for field, value in zip(lines, lines[1:]):
@@ -125,8 +128,7 @@ def get_data(url, address_name):
     print("Retrieving data...")
     data = driver.find_elements(By.CLASS_NAME, DATA_CLASS_NAME)
 
-    info = get_info(url, data)
-    print(info)
+    info = get_info(url, address_name, data)
 
     print("Extracting/Translating the description...")
     # Expand the description
@@ -207,8 +209,9 @@ except FileNotFoundError:
     entries_df = pd.DataFrame()
 
 print(entries_df)
+entries = []
 
-for url in urls:
+for url in urls[:2]:
     # Remove the trailing '/' if it exists
     if url[-1] == '/':
         url = url[:-1]
@@ -216,8 +219,12 @@ for url in urls:
     address_name = create_directory(url)
     # download_photos(url, address_name)
     info = get_data(url, address_name)
-    print(pd.DataFrame([info]))
+    entries.append(info)
     # TODO: if entry already exists, compare the data and check if there are differences
 # TODO: Generate excel file with the data
+
+entries_df = pd.DataFrame.from_records(entries)
+
+entries_df.to_csv(ENTRIES_CSV_NAME, index=False)
 
 print("Done!")
