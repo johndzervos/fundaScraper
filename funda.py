@@ -3,12 +3,14 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
+from datetime import datetime
 
 from deep_translator import GoogleTranslator
 
 import urllib.request
 import pandas as pd
 import os
+import time
 
 SEARCH_ENTRY_XPATH = "//*[@class='h-full min-w-[228px] shrink-0 cursor-pointer']"
 IMAGE_CLASS_NAME = "media-viewer-overview__section-image"
@@ -40,6 +42,12 @@ def get_address_name(url):
     address_part = url.split('/')[-1]
     # Address part has the form: { huis | appartement }-{id}-streetname-number
     return '_'.join(address_part.split('-')[2:])
+
+def get_city_name(url):
+    """
+    Returns the city name, extracted from the url
+    """
+    return url.split('/')[-2]
 
 def create_directory(directory_name):
     """
@@ -103,14 +111,24 @@ def get_info(url, address_name, data):
     ]
     info = {
         'url': url,
+        'extracted_on': datetime.today().strftime('%Y-%m-%d'),
+        'city': get_city_name(url),
         'address': address_name,
     }
     for section in data:
         lines = section.get_attribute("innerText").split('\n')
         for field, value in zip(lines, lines[1:]):
             if field in USEFUL_INFO:
-                field = '_'.join(field.lower().split())
-                info[field] = clean_string(value)
+                if field == 'Aantal kamers':
+                    # Value has the form: X kamers (Y slaapkamers)
+                    value_parts = value.split()
+                    info['kamers'] = value_parts[0]
+                    info['slaapkamers'] = value_parts[2][1:]  # [1:] is to exclude the opening parenthesis
+                else:
+                    field = '_'.join(field.lower().split())
+                    info[field] = clean_string(value)
+    # Add column for notes
+    info['note'] = ''
     return info
 
 def get_data(url, address_name):
@@ -158,29 +176,29 @@ def save_and_translate_description(description, address_name):
     with open(f'{DATA_DIRECTORY}/{address_name}/description_en.txt', 'w') as f:
         f.write(description_en)
 
-def get_all_href_urls(search_url):
+def get_all_href_urls(base_search_url):
     """
-    Extract all the href links from the search url
-    TODO: Deal with paginated results
+    Extract all the href links from the search url. I case of paginated results, navigate to all the pages.
     """
-    print(search_url)
+    has_results = True
+    search_page = 1
+    urls = []
+    while has_results:
+        search_url = f"{base_search_url}&search_result={search_page}"
 
-    driver = webdriver.Chrome(service=WEB_DRIVER_SERVICE, options=WEB_DRIVER_OPTIONS)
+        driver = webdriver.Chrome(service=WEB_DRIVER_SERVICE, options=WEB_DRIVER_OPTIONS)
+        driver.get(search_url)
 
-    driver.get(search_url)
+        links = driver.find_elements(By.XPATH, SEARCH_ENTRY_XPATH)
 
-    links = driver.find_elements(By.XPATH, SEARCH_ENTRY_XPATH)
-
-    for link in links:
-        print(link.get_attribute("href"))
-
-    urls = [
-        link.get_attribute("href")
-        for link in links
-    ]
+        for link in links:
+            print(link.get_attribute("href"))
+            urls.append(link.get_attribute("href"))
+        search_page += 1
+        has_results = bool(len(links))
 
     driver.close()
-
+    print(f"Total of {len(urls)} results found")
     return urls
 
 def generate_search_url(price_min=None, price_max=None, bedrooms_min=None, area_min=None, city=None, within_distance=None):
@@ -198,17 +216,19 @@ area_min = 100
 city = 'amsterdam'
 within_distance = '2km'
 
+start = time.time()
+
 search_url = generate_search_url(price_min, price_max, bedrooms_min, area_min, city, within_distance)
 
 urls = get_all_href_urls(search_url)
 
 # Read already saved entries
 try:
-    entries_df = pd.read_csv(ENTRIES_CSV_NAME)
+    existing_entries_df = pd.read_csv(ENTRIES_CSV_NAME)
 except FileNotFoundError:
-    entries_df = pd.DataFrame()
+    existing_entries_df = pd.DataFrame()
 
-print(entries_df)
+print(existing_entries_df)
 entries = []
 
 for url in urls[:2]:
@@ -217,14 +237,15 @@ for url in urls[:2]:
         url = url[:-1]
 
     address_name = create_directory(url)
-    # download_photos(url, address_name)
+    download_photos(url, address_name)
     info = get_data(url, address_name)
     entries.append(info)
     # TODO: if entry already exists, compare the data and check if there are differences
-# TODO: Generate excel file with the data
 
 entries_df = pd.DataFrame.from_records(entries)
 
-entries_df.to_csv(ENTRIES_CSV_NAME, index=False)
+include_headers = bool(len(existing_entries_df) == 0)
+entries_df.to_csv(ENTRIES_CSV_NAME, mode='a', index=False, header=include_headers)
 
-print("Done!")
+end = time.time()
+print(f"Done in {end-start:0.2f}!")
