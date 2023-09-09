@@ -49,22 +49,19 @@ def get_city_name(url):
     """
     return url.split('/')[-2]
 
-def create_directory(directory_name):
+def create_directory(address_name):
     """
     Creates the ouput directory named after the address
     returns the address name
     """
-    directory_name = get_address_name(url)
-    print(f"Address: {directory_name}")
-    if not os.path.exists(f'{DATA_DIRECTORY}/{directory_name}'):
-        os.mkdir(f'{DATA_DIRECTORY}/{directory_name}')
-    return directory_name
+    if not os.path.exists(f'{DATA_DIRECTORY}/{address_name}'):
+        os.mkdir(f'{DATA_DIRECTORY}/{address_name}')
 
 def download_photos(url, directory_name):
     """
     Downloads all the photos in the media library
     """
-    print("Downloading photos...")
+    print("\tDownloading photos...")
 
     driver = webdriver.Chrome(service=WEB_DRIVER_SERVICE, options=WEB_DRIVER_OPTIONS)
     media_url = f"{url}/#overzicht"
@@ -78,7 +75,7 @@ def download_photos(url, directory_name):
         name = f"{i+1:02d}_{source.split('/')[-1]}"
         urllib.request.urlretrieve(source, f"{DATA_DIRECTORY}/{directory_name}/{name}")
     driver.close()
-    print(f"{len(images)} photos have been downloaded!")
+    print(f"\t{len(images)} photos have been downloaded!")
 
 def clean_string(info_string):
     """
@@ -87,7 +84,8 @@ def clean_string(info_string):
     return (info_string.replace("€ ", "")  # in monetary fields
                        .replace(".", "")  # in monetary fields
                        .replace(" m²", "")  # in area fields
-                       .replace(" kosten koper", "")  # in asking price field
+                       .replace(" kosten koper", "")  # in asking price field 
+                       .replace(" vrij op naam", "")  # in asking price field 
                        .replace(" Wat betekent dit?", ""))  # in energy label field
 
 def get_info(url, address_name, data):
@@ -143,12 +141,12 @@ def get_data(url, address_name):
     """
     driver = webdriver.Chrome(service=WEB_DRIVER_SERVICE, options=WEB_DRIVER_OPTIONS)
     driver.get(url)
-    print("Retrieving data...")
+    print("\tRetrieving data...")
     data = driver.find_elements(By.CLASS_NAME, DATA_CLASS_NAME)
 
     info = get_info(url, address_name, data)
 
-    print("Extracting/Translating the description...")
+    print("\tExtracting/Translating the description...")
     # Expand the description
     open_button = driver.find_element(By.CLASS_NAME, DESCRIPTION_OPEN_BUTTON_CLASS)
     driver.execute_script("arguments[0].click();", open_button) 
@@ -228,19 +226,32 @@ try:
 except FileNotFoundError:
     existing_entries_df = pd.DataFrame()
 
-print(existing_entries_df)
 entries = []
 
-for url in urls[:2]:
+for i, url in enumerate(urls):
     # Remove the trailing '/' if it exists
     if url[-1] == '/':
         url = url[:-1]
 
-    address_name = create_directory(url)
-    download_photos(url, address_name)
+    address_name = get_address_name(url)
+    city_name = get_city_name(url)
+    print(f"{i+1}/{len(urls)} Address: {city_name}/{address_name}")
+
     info = get_data(url, address_name)
-    entries.append(info)
-    # TODO: if entry already exists, compare the data and check if there are differences
+
+    if existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address').shape[0]:
+        asking_price = info['vraagprijs']
+        if existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address and {asking_price} != vraagprijs').shape[0]:
+            # TODO there is a bug here
+            print(f"\tAlready retrieved! But there is a change in price ({asking_price})!")
+            info['note'] = 'PRICE_UPDATED'
+            entries.append(info)
+        else:
+            print("\tAlready retrieved! There is no change in price!")
+    else:
+        create_directory(address_name)
+        download_photos(url, address_name)
+        entries.append(info)
 
 entries_df = pd.DataFrame.from_records(entries)
 
