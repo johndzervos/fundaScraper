@@ -227,6 +227,8 @@ within_distance = '2km'
 
 start = time.time()
 
+move_data()
+
 search_url = generate_search_url(price_min, price_max, bedrooms_min, area_min, city, within_distance)
 
 urls = get_all_href_urls(search_url)
@@ -252,9 +254,10 @@ for i, url in enumerate(urls):
 
     if existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address').shape[0]:
         asking_price = info['vraagprijs']
-        if existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address and {asking_price} != vraagprijs').shape[0]:
-            # TODO there is a bug here
-            print(f"\tAlready retrieved! But there is a change in price ({asking_price})!")
+        existing_asking_price = existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address').iloc[-1]['vraagprijs']
+
+        if asking_price != existing_asking_price:
+            print(f"\tAlready retrieved! But there is a change in price ({existing_asking_price} -> {asking_price})!")
             info['note'] = 'PRICE_UPDATED'
             entries.append(info)
         else:
