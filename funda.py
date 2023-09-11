@@ -216,7 +216,7 @@ def move_data():
     Move already retrieved data from RECENT_DATA_DIRECTORY to DATA_DIRECTORY
     """
     for d in os.listdir(RECENT_DATA_DIRECTORY):
-        shutil.move(f"RECENT_DATA_DIRECTORY/{d}", DATA_DIRECTORY)
+        shutil.move(os.path.join(RECENT_DATA_DIRECTORY, d), DATA_DIRECTORY)
 
 price_min = 400000
 price_max = 700000
@@ -253,8 +253,8 @@ for i, url in enumerate(urls):
     info, description = get_data(url, address_name)
 
     if existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address').shape[0]:
-        asking_price = info['vraagprijs']
-        existing_asking_price = existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address').iloc[-1]['vraagprijs']
+        asking_price = int(info['vraagprijs'])
+        existing_asking_price = int(existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address').iloc[-1]['vraagprijs'])
 
         if asking_price != existing_asking_price:
             print(f"\tAlready retrieved! But there is a change in price ({existing_asking_price} -> {asking_price})!")
