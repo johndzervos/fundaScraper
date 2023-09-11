@@ -11,6 +11,7 @@ import urllib.request
 import pandas as pd
 import os
 import time
+import shutil
 
 SEARCH_ENTRY_XPATH = "//*[@class='h-full min-w-[228px] shrink-0 cursor-pointer']"
 IMAGE_CLASS_NAME = "media-viewer-overview__section-image"
@@ -31,9 +32,13 @@ WEB_DRIVER_SERVICE = Service(ChromeDriverManager().install())
 ENTRIES_CSV_NAME = 'entries.csv'
 
 DATA_DIRECTORY = 'data'
+RECENT_DATA_DIRECTORY = 'recent'
+
 if not os.path.exists(DATA_DIRECTORY):
     os.mkdir(DATA_DIRECTORY)
 
+if not os.path.exists(RECENT_DATA_DIRECTORY):
+    os.mkdir(RECENT_DATA_DIRECTORY)
 
 def get_address_name(url):
     """
@@ -54,8 +59,8 @@ def create_directory(address_name):
     Creates the ouput directory named after the address
     returns the address name
     """
-    if not os.path.exists(f'{DATA_DIRECTORY}/{address_name}'):
-        os.mkdir(f'{DATA_DIRECTORY}/{address_name}')
+    if not os.path.exists(f'{RECENT_DATA_DIRECTORY}/{address_name}'):
+        os.mkdir(f'{RECENT_DATA_DIRECTORY}/{address_name}')
 
 def download_photos(url, directory_name):
     """
@@ -73,7 +78,7 @@ def download_photos(url, directory_name):
     for i, img in enumerate(images):
         source = img.get_attribute("src")
         name = f"{i+1:02d}_{source.split('/')[-1]}"
-        urllib.request.urlretrieve(source, f"{DATA_DIRECTORY}/{directory_name}/{name}")
+        urllib.request.urlretrieve(source, f"{RECENT_DATA_DIRECTORY}/{directory_name}/{name}")
     driver.close()
     print(f"\t{len(images)} photos have been downloaded!")
 
@@ -154,15 +159,14 @@ def get_data(url, address_name):
     description = driver.find_elements(By.CLASS_NAME, DESCRIPTION_CLASS_NAME)[0].get_attribute("innerText")
 
     driver.close()
-    save_and_translate_description(description, address_name)
 
-    return info
+    return info, description
 
 def save_and_translate_description(description, address_name):
     """
     Save the original description and then a translation to english
     """
-    with open(f'{DATA_DIRECTORY}/{address_name}/description.txt', 'w') as f:
+    with open(f'{RECENT_DATA_DIRECTORY}/{address_name}/description.txt', 'w') as f:
         f.write(description)
 
     # Translation has a max of 5000 chars
@@ -171,7 +175,7 @@ def save_and_translate_description(description, address_name):
 
     description_en = GoogleTranslator(source='nl', target='en').translate(description)
 
-    with open(f'{DATA_DIRECTORY}/{address_name}/description_en.txt', 'w') as f:
+    with open(f'{RECENT_DATA_DIRECTORY}/{address_name}/description_en.txt', 'w') as f:
         f.write(description_en)
 
 def get_all_href_urls(base_search_url):
@@ -207,6 +211,13 @@ def generate_search_url(price_min=None, price_max=None, bedrooms_min=None, area_
     # TODO: Dynamically construct it based on the parameters
     return f"{basic_search_url}?price=%22{price_min}-{price_max}%22&bedrooms=%22{bedrooms_min}-%22&floor_area=%22{area_min}-%22&publication_date=%225%22&selected_area=%5B%22{city},{within_distance}%22%5D"
 
+def move_data():
+    """
+    Move already retrieved data from RECENT_DATA_DIRECTORY to DATA_DIRECTORY
+    """
+    for d in os.listdir(RECENT_DATA_DIRECTORY):
+        shutil.move(f"RECENT_DATA_DIRECTORY/{d}", DATA_DIRECTORY)
+
 price_min = 400000
 price_max = 700000
 bedrooms_min = 3
@@ -237,7 +248,7 @@ for i, url in enumerate(urls):
     city_name = get_city_name(url)
     print(f"{i+1}/{len(urls)} Address: {city_name}/{address_name}")
 
-    info = get_data(url, address_name)
+    info, description = get_data(url, address_name)
 
     if existing_entries_df.query(f'"{city_name}" == city and "{address_name}" == address').shape[0]:
         asking_price = info['vraagprijs']
@@ -251,6 +262,7 @@ for i, url in enumerate(urls):
     else:
         create_directory(address_name)
         download_photos(url, address_name)
+        save_and_translate_description(description, address_name)
         entries.append(info)
 
 entries_df = pd.DataFrame.from_records(entries)
