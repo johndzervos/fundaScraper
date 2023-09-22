@@ -75,18 +75,21 @@ def download_photos(url, directory_name):
 
     images = driver.find_elements(By.CLASS_NAME, IMAGE_CLASS_NAME)
     # HACK: If the photos are not loaded correctly, try again
-    if images[0].get_attribute("src") == 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAQAIBRAA7':
-        print("=====RETRY")
-        driver.get(media_url)
-        images = driver.find_elements(By.CLASS_NAME, IMAGE_CLASS_NAME)
-    # preserve the order of downloaded images with a prefix
-    for i, img in enumerate(images):
-        source = img.get_attribute("src")
-        photo_name = source.split('/')[-1]
-        name = f"{i+1:02d}_{photo_name}"
-        urllib.request.urlretrieve(source, f"{RECENT_DATA_DIRECTORY}/{directory_name}/{name}")
+    if len(images) > 0:
+        if images[0].get_attribute("src") == 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAQAIBRAA7':
+            print("\tRetrying...")
+            driver.get(media_url)
+            images = driver.find_elements(By.CLASS_NAME, IMAGE_CLASS_NAME)
+        # preserve the order of downloaded images with a prefix
+        for i, img in enumerate(images):
+            source = img.get_attribute("src")
+            photo_name = source.split('/')[-1]
+            name = f"{i+1:02d}_{photo_name}"
+            urllib.request.urlretrieve(source, f"{RECENT_DATA_DIRECTORY}/{directory_name}/{name}")
+        print(f"\t{len(images)} photos have been downloaded!")
+    else:
+        print("\tNo images to download!")
     driver.close()
-    print(f"\t{len(images)} photos have been downloaded!")
 
 def clean_string(info_string):
     """
