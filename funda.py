@@ -224,8 +224,14 @@ def move_data():
     """
     Move already retrieved data from RECENT_DATA_DIRECTORY to DATA_DIRECTORY
     """
-    for d in os.listdir(RECENT_DATA_DIRECTORY):
-        shutil.move(os.path.join(RECENT_DATA_DIRECTORY, d), DATA_DIRECTORY)
+    recent_data = os.listdir(RECENT_DATA_DIRECTORY)
+    if len(recent_data) > 0:
+        print(f"Moving directories from {RECENT_DATA_DIRECTORY} to {DATA_DIRECTORY}")
+        for d in os.listdir(RECENT_DATA_DIRECTORY):
+            if os.path.exists(os.path.join(DATA_DIRECTORY, d)):
+                print(f"\tRemoving existing directory '{os.path.join(DATA_DIRECTORY, d)}' ...")
+                shutil.rmtree(os.path.join(DATA_DIRECTORY, d))
+            shutil.move(os.path.join(RECENT_DATA_DIRECTORY, d), DATA_DIRECTORY)
 
 price_min = 400000
 price_max = 700000
@@ -239,6 +245,7 @@ start = time.time()
 move_data()
 
 search_url = generate_search_url(price_min, price_max, bedrooms_min, area_min, city, within_distance)
+print(search_url)
 
 urls = get_all_href_urls(search_url)
 
